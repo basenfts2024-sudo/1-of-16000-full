@@ -1,4 +1,4 @@
-import os, json
+import os
 from datetime import datetime, timezone
 try:
     import psycopg
@@ -6,7 +6,11 @@ try:
 except Exception:
     psycopg = None
 
-DATABASE_URL = os.getenv('DATABASE_URL','')
+# Neon/Vercel integrations may expose any of these names. Never hard-code a DB password.
+DATABASE_URL = next((os.getenv(k, '') for k in (
+    'DATABASE_URL','NEON_DATABASE_URL','POSTGRES_URL','POSTGRES_URL_NON_POOLING','POSTGRES_PRISMA_URL'
+) if os.getenv(k)), '')
+
 SCHEMA = r'''
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS drafts(token_id INTEGER PRIMARY KEY,updated_at TEXT NOT NULL,metadata_json JSONB NOT NULL,live_metadata_uri TEXT,image_uri TEXT);
@@ -20,8 +24,17 @@ CREATE TABLE IF NOT EXISTS vg_match_candidates(id BIGSERIAL PRIMARY KEY,remix_ke
 CREATE TABLE IF NOT EXISTS vg_reviews(remix_key TEXT PRIMARY KEY,token_id INTEGER,status TEXT NOT NULL DEFAULT 'unreviewed',approved_sources JSONB NOT NULL DEFAULT '[]'::jsonb,remixed_elements JSONB NOT NULL DEFAULT '{}'::jsonb,visual_traits JSONB NOT NULL DEFAULT '{}'::jsonb,notes TEXT,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS vg_activity(id BIGSERIAL PRIMARY KEY,created_at TEXT NOT NULL,remix_key TEXT,action TEXT NOT NULL,payload JSONB);
 '''
-def nowiso(): return datetime.now(timezone.utc).isoformat()
+
+def nowiso():
+    return datetime.now(timezone.utc).isoformat()
+
+def configured():
+    return bool(DATABASE_URL and psycopg is not None)
+
 def conn():
-    if not DATABASE_URL or psycopg is None: return None
-    c=psycopg.connect(DATABASE_URL,row_factory=dict_row)
-    c.execute(SCHEMA); c.commit(); return c
+    if not configured():
+        return None
+    c = psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=10)
+    c.execute(SCHEMA)
+    c.commit()
+    return c
