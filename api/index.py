@@ -2,12 +2,28 @@ import re
 import requests
 from fastapi import FastAPI, HTTPException
 
-app = FastAPI(title='1 OF 16000 — Pierre Remixes', version='5.0.0')
+app = FastAPI(title='1 OF 16000 — Pierre Remixes', version='5.1.0')
 BASE = 'https://opepen.art'
 HEADERS = {
-    'User-Agent': '1of16000-opepen-monitor/5.0',
+    'User-Agent': '1of16000-opepen-monitor/5.1',
     'Accept': 'text/html,application/xhtml+xml',
 }
+BOOT_ERRORS = {}
+
+
+def mount(name, module_path):
+    try:
+        module = __import__(module_path, fromlist=['router'])
+        app.include_router(module.router)
+    except Exception as exc:
+        BOOT_ERRORS[name] = f'{type(exc).__name__}: {exc}'
+
+
+# These are the real working application APIs. Keep each isolated so one
+# optional subsystem cannot prevent the others from starting.
+mount('core', 'api.core')
+mount('deflation', 'api.deflation')
+mount('traits', 'api.traits')
 
 
 def fetch_page(path: str) -> str:
@@ -24,26 +40,29 @@ def submission_ids(html: str):
 def boot():
     return {
         'ok': True,
-        'version': '5.0.0',
-        'architecture': 'static-first',
-        'builder': 'static-independent',
-        'visual_genome': 'local-first-indexeddb',
-        'activity_source': 'https://opepen.art',
-        'note': 'Heavy database, Web3 and publishing services are isolated from this health endpoint.'
+        'version': '5.1.0',
+        'architecture': 'static-first + isolated APIs',
+        'mounted': {
+            'core': 'core' not in BOOT_ERRORS,
+            'deflation': 'deflation' not in BOOT_ERRORS,
+            'traits': 'traits' not in BOOT_ERRORS,
+        },
+        'boot_errors': BOOT_ERRORS,
+        'activity_source': BASE,
     }
 
 
-@app.get('/api/health')
-def health():
-    return {
-        'ok': True,
-        'version': '5.0.0',
-        'opepen_source': 'https://opepen.art',
-        'static_apps': {
-            'builder': '/builder.html',
-            'traits': '/traits.html',
+# If core loaded it owns /api/health. This fallback exists only when core could
+# not import, so the site can still report a useful diagnostic.
+if 'core' in BOOT_ERRORS:
+    @app.get('/api/health')
+    def health_fallback():
+        return {
+            'ok': False,
+            'version': '5.1.0',
+            'opepen_source': BASE,
+            'boot_errors': BOOT_ERRORS,
         }
-    }
 
 
 @app.get('/api/opepen/source')
@@ -62,7 +81,7 @@ def opepen_source():
         'contributions_page': BASE + '/contribute',
         'latest_submission_links_visible': len(latest),
         'open_contribution_sets_visible': len(open_sets),
-        'latest_submission_ids': latest[:50],
-        'open_contribution_set_ids': open_sets[:50],
+        'latest_submission_ids': latest[:100],
+        'open_contribution_set_ids': open_sets[:100],
         'database_required': False,
     }
