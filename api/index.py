@@ -1,66 +1,68 @@
-from pathlib import Path
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+import re
+import requests
+from fastapi import FastAPI, HTTPException
 
-app = FastAPI(title='1 OF 16000 — Pierre Remixes', version='4.2.0')
-BOOT_ERRORS = {}
-
-
-def mount(name, module_path):
-    try:
-        module = __import__(module_path, fromlist=['router'])
-        app.include_router(module.router)
-    except Exception as exc:
-        BOOT_ERRORS[name] = f'{type(exc).__name__}: {exc}'
+app = FastAPI(title='1 OF 16000 — Pierre Remixes', version='5.0.0')
+BASE = 'https://opepen.art'
+HEADERS = {
+    'User-Agent': '1of16000-opepen-monitor/5.0',
+    'Accept': 'text/html,application/xhtml+xml',
+}
 
 
-# Keep the application alive even if one optional subsystem fails to import.
-mount('opepen_source', 'api.opepen_source')
-mount('core', 'api.core')
-mount('deflation', 'api.deflation')
-mount('traits', 'api.traits')
+def fetch_page(path: str) -> str:
+    r = requests.get(BASE + path, headers=HEADERS, timeout=20)
+    r.raise_for_status()
+    return r.text
+
+
+def submission_ids(html: str):
+    return list(dict.fromkeys(re.findall(r'/submissions/([0-9a-fA-F-]{36})', html)))
 
 
 @app.get('/api/boot')
 def boot():
     return {
         'ok': True,
-        'version': '4.2.0',
-        'boot_errors': BOOT_ERRORS,
-        'mounted': {
-            'opepen_source': 'opepen_source' not in BOOT_ERRORS,
-            'core': 'core' not in BOOT_ERRORS,
-            'deflation': 'deflation' not in BOOT_ERRORS,
-            'traits': 'traits' not in BOOT_ERRORS,
-        },
+        'version': '5.0.0',
+        'architecture': 'static-first',
+        'builder': 'static-independent',
+        'visual_genome': 'local-first-indexeddb',
+        'activity_source': 'https://opepen.art',
+        'note': 'Heavy database, Web3 and publishing services are isolated from this health endpoint.'
     }
 
 
-@app.get('/', response_class=HTMLResponse)
-@app.get('/app', response_class=HTMLResponse)
-def home():
-    path = Path(__file__).resolve().parent.parent / 'public' / 'index.html'
+@app.get('/api/health')
+def health():
+    return {
+        'ok': True,
+        'version': '5.0.0',
+        'opepen_source': 'https://opepen.art',
+        'static_apps': {
+            'builder': '/builder.html',
+            'traits': '/traits.html',
+        }
+    }
+
+
+@app.get('/api/opepen/source')
+def opepen_source():
     try:
-        return HTMLResponse(path.read_text(encoding='utf-8'))
+        submissions_html = fetch_page('/submissions?search=&sort=latest')
+        contribute_html = fetch_page('/contribute')
     except Exception as exc:
-        return HTMLResponse(
-            '<!doctype html><html><body style="font-family:Arial;padding:40px">'
-            '<h1>1 OF 16000</h1><p>The API is running but the dashboard asset could not be loaded.</p>'
-            f'<pre>{type(exc).__name__}: {exc}</pre>'
-            '<p>Check <a href="/api/boot">/api/boot</a> for backend status.</p>'
-            '</body></html>',
-            status_code=200,
-        )
-
-
-@app.exception_handler(Exception)
-async def unhandled(request, exc):
-    return JSONResponse(
-        status_code=500,
-        content={
-            'detail': 'Server error',
-            'type': type(exc).__name__,
-            'message': str(exc),
-            'path': str(request.url.path),
-        },
-    )
+        raise HTTPException(502, f'opepen.art is not reachable: {type(exc).__name__}: {exc}')
+    latest = submission_ids(submissions_html)
+    open_sets = submission_ids(contribute_html)
+    return {
+        'ok': True,
+        'source': BASE,
+        'submissions_page': BASE + '/submissions?search=&sort=latest',
+        'contributions_page': BASE + '/contribute',
+        'latest_submission_links_visible': len(latest),
+        'open_contribution_sets_visible': len(open_sets),
+        'latest_submission_ids': latest[:50],
+        'open_contribution_set_ids': open_sets[:50],
+        'database_required': False,
+    }
