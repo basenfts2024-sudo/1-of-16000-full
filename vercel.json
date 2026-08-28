@@ -1,17 +1,13 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "api/index.py", "use": "@vercel/python" }
-  ],
-  "routes": [
-    { "src": "/builder.html", "dest": "/public/builder.html" },
-    { "src": "/builder.css", "dest": "/public/builder.css" },
-    { "src": "/builder.js", "dest": "/public/builder.js" },
-    { "src": "/traits.html", "dest": "/public/traits.html" },
-    { "src": "/opepen-schematics.svg", "dest": "/public/opepen-schematics.svg" },
-    { "src": "/api/(.*)", "dest": "/api/index.py" },
-    { "src": "/app", "dest": "/api/index.py" },
-    { "src": "/", "dest": "/api/index.py" }
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index.py" },
+    { "source": "/app", "destination": "/api/index.py" },
+    { "source": "/", "destination": "/api/index.py" }
   ],
   "crons": [
     { "path": "/api/cron/scan", "schedule": "15 3 * * *" }
