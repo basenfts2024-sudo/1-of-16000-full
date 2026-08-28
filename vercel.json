@@ -5,7 +5,8 @@
     }
   },
   "rewrites": [
-    { "source": "/", "destination": "/public/index.html" },
+    { "source": "/", "destination": "/public/home.html" },
+    { "source": "/gallery.html", "destination": "/public/gallery.html" },
     { "source": "/builder.html", "destination": "/public/builder.html" },
     { "source": "/builder.css", "destination": "/public/builder.css" },
     { "source": "/builder.js", "destination": "/public/builder.js" },
