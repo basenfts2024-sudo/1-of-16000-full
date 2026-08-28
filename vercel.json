@@ -4,6 +4,14 @@
       "maxDuration": 60
     }
   },
+  "rewrites": [
+    { "source": "/", "destination": "/public/index.html" },
+    { "source": "/builder.html", "destination": "/public/builder.html" },
+    { "source": "/builder.css", "destination": "/public/builder.css" },
+    { "source": "/builder.js", "destination": "/public/builder.js" },
+    { "source": "/opepen-schematics.svg", "destination": "/public/opepen-schematics.svg" },
+    { "source": "/traits.html", "destination": "/public/traits.html" }
+  ],
   "crons": [
     { "path": "/api/cron/scan", "schedule": "15 3 * * *" }
   ]
